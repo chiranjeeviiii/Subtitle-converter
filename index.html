@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Subtitle → SRT Converter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f1f3f8;
+    }
+    h2 { margin-bottom: 8px; }
+    .box {
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #0002;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px dashed #777;
+      border-radius: 8px;
+      background: #fafafa;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #0078ff;
+      color: white;
+      font-size: 16px;
+      width: 100%;
+      margin-top: 10px;
+    }
+    button:disabled { opacity: 0.6; }
+    .status { margin-top: 10px; font-size: 14px; }
+  </style>
+</head>
+
+<body>
+
+  <h2>Subtitle → SRT Converter</h2>
+  <div class="box">
+
+    <input id="fileInput" type="file" accept=".srt,.vtt,.ass,.ssa">
+    <button id="convertBtn">Convert to SRT</button>
+
+    <p class="status" id="status">Upload a subtitle file to begin.</p>
+
+  </div>
+
+<script>
+let fileInput = document.getElementById("fileInput");
+let convertBtn = document.getElementById("convertBtn");
+let statusBox = document.getElementById("status");
+let currentFile = null;
+
+fileInput.addEventListener("change", function () {
+  currentFile = fileInput.files[0];
+  statusBox.innerText = "Loaded: " + currentFile.name;
+});
+
+convertBtn.addEventListener("click", function () {
+  if (!currentFile) {
+    statusBox.innerText = "Please upload a file first!";
+    return;
+  }
+
+  let reader = new FileReader();
+  reader.onload = () => {
+    let text = reader.result;
+    let type = detectFormat(currentFile.name, text);
+
+    let srt = "";
+
+    if (type === "srt") srt = text;
+    else if (type === "vtt") srt = vttToSrt(text);
+    else if (type === "ass" || type === "ssa") srt = assToSrt(text);
+    else {
+      statusBox.innerText = "Unsupported format.";
+      return;
+    }
+
+    download("converted.srt", srt);
+    statusBox.innerText = "Converted successfully!";
+  };
+
+  reader.readAsText(currentFile);
+});
+
+function detectFormat(name, content) {
+  name = name.toLowerCase();
+  if (name.endsWith(".srt")) return "srt";
+  if (name.endsWith(".vtt")) return "vtt";
+  if (name.endsWith(".ass")) return "ass";
+  if (name.endsWith(".ssa")) return "ssa";
+
+  if (/^WEBVTT/m.test(content)) return "vtt";
+  if (/^\d+\s*\n\d{2}:\d{2}:\d{2},/.test(content)) return "srt";
+  if (/\[Events\]/i.test(content)) return "ass";
+
+  return "srt";
+}
+
+function vttToSrt(text) {
+  text = text.replace(/^WEBVTT.*\n/, "");
+  return text.replace(
+    /(\d{2}:\d{2}:\d{2})\.(\d{3}) --> (\d{2}:\d{2}:\d{2})\.(\d{3})/g,
+    "$1,$2 --> $3,$4"
+  );
+}
+
+function assToSrt(text) {
+  text = text.replace(/\r/g, "");
+  let lines = text.split("\n");
+  let srt = "";
+  let index = 1;
+
+  for (let line of lines) {
+    if (!line.startsWith("Dialogue:")) continue;
+
+    let parts = line.split(",");
+    let start = parts[1];
+    let end = parts[2];
+    let txt = parts.slice(9).join(",");
+
+    txt = txt.replace(/{.*?}/g, "");
+    txt = txt.replace(/\\N/g, "\n");
+
+    srt += index++ + "\n";
+    srt += assTime(start) + " --> " + assTime(end) + "\n";
+    srt += txt + "\n\n";
+  }
+
+  return srt;
+}
+
+function assTime(t) {
+  let p = t.split(":");
+  let sec = p[2].split(".");
+  return (
+    p[0].padStart(2, "0") +
+    ":" +
+    p[1].padStart(2, "0") +
+    ":" +
+    sec[0].padStart(2, "0") +
+    "," +
+    (parseInt(sec[1]) * 10).toString().padStart(3, "0")
+  );
+}
+
+function download(filename, text) {
+  let blob = new Blob([text], { type: "text/plain" });
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
